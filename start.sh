@@ -65,8 +65,34 @@ else
     elif command -v wget >/dev/null 2>&1; then
       wget -q "https://dlcdn.apache.org/maven/maven-3/$MAVEN_VERSION/binaries/$ARCHIVE" -O "$MAVEN_CACHE_DIR/$ARCHIVE" \
         || wget -q "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/$ARCHIVE" -O "$MAVEN_CACHE_DIR/$ARCHIVE"
+    elif command -v python3 >/dev/null 2>&1; then
+      PRIMARY_URL="https://dlcdn.apache.org/maven/maven-3/$MAVEN_VERSION/binaries/$ARCHIVE"
+      FALLBACK_URL="https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/$MAVEN_VERSION/$ARCHIVE"
+      MAVEN_DOWNLOAD_DEST="$MAVEN_CACHE_DIR/$ARCHIVE" \
+        MAVEN_PRIMARY_URL="$PRIMARY_URL" MAVEN_FALLBACK_URL="$FALLBACK_URL" \
+        python3 <<'PY'
+import os
+import sys
+import urllib.error
+import urllib.request
+
+dest = os.environ["MAVEN_DOWNLOAD_DEST"]
+urls = [os.environ["MAVEN_PRIMARY_URL"], os.environ["MAVEN_FALLBACK_URL"]]
+
+last_error = None
+for url in urls:
+    try:
+        with urllib.request.urlopen(url) as response, open(dest, "wb") as fh:
+            fh.write(response.read())
+        break
+    except (urllib.error.URLError, OSError) as exc:
+        last_error = exc
+else:
+    sys.stderr.write(f"Failed to download Maven from {urls}: {last_error}\n")
+    sys.exit(1)
+PY
     else
-      echo "Neither curl nor wget is available to download Maven." >&2
+      echo "Neither curl, wget, nor python3 is available to download Maven." >&2
       exit 1
     fi
     tar -xzf "$MAVEN_CACHE_DIR/$ARCHIVE" -C "$MAVEN_CACHE_DIR"
