@@ -20,9 +20,10 @@ Railway can deploy each service either from the provided `Dockerfile` or by usin
 3. The `start.sh` helper script automatically runs the correct module based on the service
    name (or the `SERVICE_MODULE` environment variable) and will build the application if a
    packaged JAR is not already available. When Maven is not pre-installed in the runtime
-   container, the script bootstraps a local copy on the fly before building. Hyphenated
-   Railway service names such as `project-demo-api` or `myproject-web` are detected
-   automatically, so manual overrides are rarely needed.
+   container, the script bootstraps a local copy on the fly before building and can fall back
+   to Python's standard library to download Maven when `curl`/`wget` are unavailable.
+   Hyphenated Railway service names such as `project-demo-api` or `myproject-web` are
+   detected automatically, so manual overrides are rarely needed.
 4. Configure environment variables for each service as described below.
 
 ## Environment variables
