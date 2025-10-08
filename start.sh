@@ -4,17 +4,36 @@ set -euo pipefail
 SERVICE_NAME="${RAILWAY_SERVICE_NAME:-${SERVICE_MODULE:-project_demo_web}}"
 PORT_VALUE="${PORT:-8080}"
 
-case "$SERVICE_NAME" in
-  project_demo_web|Project_demo|web|WEB)
+# Determine which module should run. Allow explicit overrides via SERVICE_MODULE, but
+# fall back to heuristics that examine the (case-insensitive) Railway service name so
+# that names such as "project-demo-api" or "prod-web" work out-of-the-box.
+SERVICE_HINT="${SERVICE_MODULE:-}"
+if [ -z "$SERVICE_HINT" ]; then
+  SERVICE_HINT=$(printf '%s' "$SERVICE_NAME" | tr '[:upper:]' '[:lower:]')
+  case "$SERVICE_HINT" in
+    *api*)
+      SERVICE_HINT="api"
+      ;;
+    *web*|*front*|*ui*)
+      SERVICE_HINT="web"
+      ;;
+    *)
+      SERVICE_HINT="web"
+      ;;
+  esac
+fi
+
+case "$SERVICE_HINT" in
+  web)
     MODULE_DIR="Project_demo"
     JAR_NAME="Project_demo-0.0.1-SNAPSHOT.jar"
     ;;
-  project_demo_api|Project_demo_API|api|API)
+  api)
     MODULE_DIR="Project_demo_API"
     JAR_NAME="lab07_2567_one_many-0.0.1-SNAPSHOT.jar"
     ;;
   *)
-    echo "Unknown service name '$SERVICE_NAME'. Set SERVICE_MODULE to 'web' or 'api'." >&2
+    echo "Unknown service selection '$SERVICE_HINT'. Set SERVICE_MODULE to 'web' or 'api'." >&2
     exit 1
     ;;
 esac
