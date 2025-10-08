@@ -1,0 +1,16 @@
+[project]
+name = "software-design-project"
+
+[services.project_demo_web]
+root = "."
+start = "./start.sh"
+
+[services.project_demo_web.env]
+SERVICE_MODULE = "web"
+
+[services.project_demo_api]
+root = "."
+start = "./start.sh"
+
+[services.project_demo_api.env]
+SERVICE_MODULE = "api"
