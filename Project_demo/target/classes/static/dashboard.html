@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>📊 Dashboard - ยอดขาย</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 0;
+    }
+    header {
+      background: #2c3e50;
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      font-size: 1.8rem;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background: #34495e;
+      color: #fff;
+    }
+    tfoot td {
+      font-weight: bold;
+    }
+    .total-box {
+      text-align: right;
+      font-size: 1.3rem;
+      margin-top: 15px;
+      color: #2c3e50;
+    }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 15px;
+      display: none;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>📊 Dashboard - ยอดขายทั้งหมด</h1>
+  </header>
+
+  <div class="container">
+    <div id="errorBox" class="error"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Order ID</th>
+          <th>โต๊ะ</th>
+          <th>จำนวนรายการ</th>
+          <th>ยอดรวม (บาท)</th>
+          <th>เวลาสั่ง</th>
+        </tr>
+      </thead>
+      <tbody id="ordersBody">
+        <tr><td colspan="5">กำลังโหลดข้อมูล...</td></tr>
+      </tbody>
+    </table>
+
+    <div class="total-box">
+      💰 ยอดขายรวมทั้งหมด: <span id="totalSales">0.00</span> บาท
+    </div>
+  </div>
+
+  <script>
+    const DASHBOARD_API = "http://localhost:8085/api/data/orders/status/PAID";
+
+    document.addEventListener("DOMContentLoaded", () => {
+      fetchDashboardData();
+    });
+
+    async function fetchDashboardData() {
+      const errorBox = document.getElementById("errorBox");
+      errorBox.style.display = "none";
+
+      try {
+        const res = await fetch(DASHBOARD_API);
+        if (!res.ok) {
+          throw new Error(`โหลดข้อมูลไม่สำเร็จ (status ${res.status})`);
+        }
+        const data = await res.json();
+        renderTable(data);
+        renderTotal(data);
+      } catch (err) {
+        errorBox.innerText = `❌ ${err.message}`;
+        errorBox.style.display = "block";
+        document.getElementById("ordersBody").innerHTML =
+          `<tr><td colspan="5">เกิดข้อผิดพลาด</td></tr>`;
+      }
+    }
+
+    function renderTable(orders) {
+      const tbody = document.getElementById('ordersBody');
+      if (!orders || orders.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5">ไม่มีข้อมูล</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = orders.map(order => {
+        const total = order.items?.reduce((sum, item) => {
+          const price = (item.menuItemDetails?.price !== undefined)
+              ? item.menuItemDetails.price
+              : (item.price !== undefined ? item.price : 0);
+          return sum + (price * item.quantity);
+        }, 0) || 0;
+
+        const totalItems = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
+
+        const date = order.createdAt 
+            ? new Date(order.createdAt).toLocaleString('th-TH') 
+            : '-';
+
+        return `
+          <tr>
+            <td>${order.id}</td>
+            <td>${order.tableId}</td>
+            <td>${totalItems}</td>
+            <td>${total.toFixed(2)}</td>
+            <td>${date}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderTotal(orders) {
+      const grandTotal = orders.reduce((sum, order) => {
+        const orderTotal = order.items?.reduce((subtotal, item) => {
+          const price = (item.menuItemDetails?.price !== undefined)
+              ? item.menuItemDetails.price
+              : (item.price !== undefined ? item.price : 0);
+          return subtotal + (price * item.quantity);
+        }, 0) || 0;
+        return sum + orderTotal;
+      }, 0);
+
+      document.getElementById('totalSales').innerText = grandTotal.toFixed(2);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>พนักงาน - คิดเงินและยอดขาย</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root { color-scheme: light dark; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    background: #f4f6f8;
+    color: #2c3e50;
+}
+header {
+    background: #1f3a93;
+    color: #fff;
+    padding: 18px 24px;
+    display: flex;
+    justify-content: space-between; /* หัวข้อซ้าย กลุ่มขวา */
+    align-items: center;
+}
+
+.staff-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* ระยะระหว่างชื่อกับปุ่ม */
+}
+
+header h1 { margin:0; font-size:1.6rem; }
+.staff-info { font-size:0.95rem; }
+
+main {
+    display: grid;
+    gap: 20px;
+    padding: 24px;
+}
+@media (min-width: 960px) {
+    main { grid-template-columns: 1.2fr 1fr; }
+}
+section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(31,58,147,0.08);
+}
+h2 {
+    margin-top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.2rem;
+}
+button.primary {
+    background: #2254c5;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: white;
+}
+button.secondary {
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    color: inherit;
+}
+button:disabled { opacity:0.5; cursor:not-allowed; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #ecf0f1; vertical-align: top; }
+th { background: #f8f9fb; color:#2c3e50; }
+.order-items { font-size:0.9rem; }
+.order-items li { list-style:none; }
+.status-pill {
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:0.8rem;
+    background:#ffeaa7;
+    color:#8e44ad;
+}
+.error-box {
+    background:#f8d7da;
+    color:#721c24;
+    padding:12px;
+    border-radius:8px;
+    margin-top:12px;
+    display:none;
+}
+.receipt-card {
+    margin-top:16px;
+    border:1px dashed #95a5a6;
+    padding:16px;
+    border-radius:10px;
+    background:#fafafa;
+}
+.totals { text-align:right; margin-top:18px; font-size:1.1rem; font-weight:bold; }
+.table-search { display:flex; gap:10px; margin-top:12px; }
+.table-search input {
+    flex:1;
+    padding:10px;
+    border-radius:8px;
+    border:1px solid rgba(0,0,0,0.2);
+}
+.muted { color:#7f8c8d; }
+
+/* Chart Layout */
+.chart-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: 20px;
+}
+.chart-box {
+    flex: 1 1 45%; 
+    min-width: 350px;
+    max-width: 400px; /* ลดขนาด Pie Chart */
+    background: #fff;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+#salesDateFilter {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.2);
+    font-size: 0.9rem;
+}
+.table-scroll {
+    max-height: 400px;       /* 🔹 กำหนดความสูงสูงสุดของกล่องตาราง */
+    overflow-y: auto;        /* 🔹 เปิดการเลื่อนแนวตั้ง */
+    border-radius: 10px;     /* 🔹 มุมโค้งดูสวยขึ้น */
+    border: 1px solid #eee;  /* 🔹 ขอบบาง ๆ เพื่อแยกตารางออกจากพื้นหลัง */
+}
+
+/* ให้ header ตารางคงที่เวลาเลื่อน */
+.table-scroll thead th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fb;
+    z-index: 2;
+}
+
+
+</style>
+</head>
+
+<body>
+<header>
+    <h1>ศูนย์ควบคุมพนักงาน</h1>
+
+    <!-- กลุ่มชื่อบัญชี + ปุ่ม logout -->
+    <div class="staff-controls">
+        <div class="staff-info" id="staffInfo">กำลังตรวจสอบบัญชี...</div>
+        <button class="secondary" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+</header>
+
+<main>
+    <!-- หน้าคิดเงิน -->
+    <section id="checkoutSection">
+        <h2>💳 หน้าคิดเงิน <button class="secondary" id="refreshPending">รีเฟรช</button></h2>
+        <p class="muted">ดูออเดอร์ที่ทำอาหารเสร็จและรอการคิดเงิน</p>
+        <div class="table-search">
+            <input type="number" id="tableSearch" placeholder="ค้นหาด้วยหมายเลขโต๊ะ" min="1" />
+            <button class="secondary" id="filterBtn">ค้นหา</button>
+            <button class="secondary" id="clearFilterBtn">ล้าง</button>
+        </div>
+        <div id="pendingError" class="error-box"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>โต๊ะ</th>
+                    <th>รายการอาหาร</th>
+                    <th>ยอดรวม (บาท)</th>
+                    <th>จัดการ</th>
+                </tr>
+            </thead>
+            <tbody id="pendingOrdersBody">
+                <tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+        </table>
+        <div id="receiptContainer"></div>
+    </section>
+
+    <!-- ยอดขายล่าสุด + กราฟ -->
+    <section>
+         <h2>
+        📊 ยอดขายล่าสุด 
+        <div>
+            <input type="date" id="salesDateFilter" />
+            <button class="secondary" id="filterSales">ค้นหา</button>
+            <button class="secondary" id="refreshSales">รีเฟรช</button>
+             <button class="secondary" id="showAllSales">ดูทั้งหมด</button>
+        </div>
+    	</h2>
+    	
+        <p class="muted">สรุปยอดขายจากออเดอร์ที่ชำระเงินแล้ว</p>
+        <div id="salesError" class="error-box"></div>
+
+        <div class="chart-container">
+            <div class="chart-box">
+                <canvas id="salesChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <canvas id="menuPieChart"></canvas>
+            </div>
+        </div>
+<div class="table-scroll">
+    	<table>
+        	<thead>
+          	  <tr>
+               	 <th>Order</th>
+               	 <th>โต๊ะ</th>
+            	 <th>จำนวนรายการ</th>
+        	     <th>ยอดรวม (บาท)</th>
+               	 <th>เวลาสั่ง</th>
+           	 </tr>
+        </thead>
+        <tbody id="salesBody">
+            <tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>
+        </tbody>
+    </table>
+        <div class="totals">ยอดขายรวม: <span id="salesTotal">0.00</span> บาท</div>
+    </section>
+</main>
+
+<script>
+const API_BASE = '/api/orders';
+const PENDING_ENDPOINT = `${API_BASE}/status/COMPLETED`;
+const SALES_ENDPOINT = `${API_BASE}/status/PAID`;
+
+const staffInfo = document.getElementById('staffInfo');
+const pendingBody = document.getElementById('pendingOrdersBody');
+const salesBody = document.getElementById('salesBody');
+const pendingError = document.getElementById('pendingError');
+const salesError = document.getElementById('salesError');
+const receiptContainer = document.getElementById('receiptContainer');
+
+document.getElementById('refreshPending').addEventListener('click', loadPendingOrders);
+document.getElementById('refreshSales').addEventListener('click', loadSales);
+
+
+document.getElementById('showAllSales').addEventListener('click', () => {
+    // เคลียร์ค่าช่องวันที่
+    document.getElementById('salesDateFilter').value = '';
+
+    // เคลียร์กราฟเก่า (กันซ้อน)
+    if (salesChart) { salesChart.destroy(); salesChart = null; }
+    if (menuPieChart) { menuPieChart.destroy(); menuPieChart = null; }
+
+    // โหลดข้อมูลทั้งหมด
+    loadSales();
+});
+
+
+
+document.getElementById('salesDateFilter').addEventListener('change', () => {
+    if (salesChart) { salesChart.destroy(); salesChart = null; }
+    if (menuPieChart) { menuPieChart.destroy(); menuPieChart = null; }
+    loadSales();
+});
+
+
+
+
+
+document.getElementById('filterBtn').addEventListener('click', loadPendingOrders);
+document.getElementById('clearFilterBtn').addEventListener('click', () => {
+    document.getElementById('tableSearch').value = '';
+    loadPendingOrders();
+});
+
+function initStaffInfo() {
+    const name = localStorage.getItem('staffDisplayName') || 'พนักงาน';
+    const role = localStorage.getItem('staffRole') || 'EMPLOYEE';
+    staffInfo.innerText = `${name} (${role})`;
+}
+
+// -------------------- หน้าคิดเงิน --------------------
+async function loadPendingOrders() {
+    pendingError.style.display = 'none';
+    const tableFilter = document.getElementById('tableSearch').value.trim();
+    pendingBody.innerHTML = '<tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>';
+    try {
+        const res = await fetch(PENDING_ENDPOINT);
+        if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
+        const data = await res.json();
+        const filtered = tableFilter ? data.filter(order => `${order.tableId}` === tableFilter) : data;
+        renderPendingOrders(filtered);
+    } catch (err) {
+        pendingError.innerText = `❌ ${err.message}`;
+        pendingError.style.display = 'block';
+        pendingBody.innerHTML = '<tr><td colspan="5">ไม่สามารถโหลดรายการรอคิดเงินได้</td></tr>';
+    }
+}
+
+function renderPendingOrders(orders) {
+    if (!orders || orders.length===0) {
+        pendingBody.innerHTML = '<tr><td colspan="5" class="muted">ไม่มีออเดอร์ที่รอคิดเงิน</td></tr>';
+        return;
+    }
+    pendingBody.innerHTML = orders.map(order => {
+        const total = calculateOrderTotal(order);
+        const itemsHtml = (order.items||[]).map(item => {
+            const name = item.menuItemDetails?.name || item.name || 'เมนูไม่ทราบชื่อ';
+            const price = resolveItemPrice(item);
+            return `<li>${name} × ${item.quantity} = ${(price*item.quantity).toFixed(2)} บาท</li>`;
+        }).join('');
+        return `<tr>
+            <td>#${order.id} <span class="status-pill">${order.status||'COMPLETED'}</span></td>
+            <td>${order.tableId ?? '-'}</td>
+            <td><ul class="order-items">${itemsHtml}</ul></td>
+            <td>${total.toFixed(2)}</td>
+            <td><button class="primary" onclick="collectPayment(${order.id}, ${order.tableId ?? 'null'})">รับชำระเงิน</button></td>
+        </tr>`;
+    }).join('');
+}
+
+async function collectPayment(orderId, tableId) {
+    if(!confirm(`ยืนยันการชำระเงินสำหรับออเดอร์ #${orderId}?`)) return;
+    try {
+        const endpoint = `${API_BASE}/${orderId}/payment`;
+        const res = await fetch(endpoint, {method:'POST'});
+        if(!res.ok) throw new Error(`ไม่สามารถชำระเงินได้ (status ${res.status})`);
+        const receipt = await res.json();
+        showReceipt(orderId, tableId, receipt);
+        loadPendingOrders();
+        loadSales();
+    } catch(err) { alert(`❌ ${err.message}`); }
+}
+
+function showReceipt(tableId, receipt) {
+    const paidAt = receipt.paidAt ? new Date(receipt.paidAt).toLocaleString('th-TH') : '-';
+    
+    const staffViewHtml = `
+        <div class="receipt-card" id="receiptCard">
+            <div style="text-align:right;">
+                <button class="secondary" onclick="hideReceipt()">❌ ปิดใบเสร็จ</button>
+            </div>
+            <h3>🧾 ใบเสร็จรวมโต๊ะ #${tableId}</h3>
+            <p>ออเดอร์ที่รวม: ${receipt.orders.join(', ')}</p>
+            <ul>
+                ${(receipt.items || []).map(item => {
+                    const name = item.menuItemDetails?.name || item.name || 'ไม่ทราบชื่อเมนู';
+                    const price = resolveItemPrice(item);
+                    return `<li>${name} × ${item.quantity} = ${(price * item.quantity).toFixed(2)} บาท</li>`;
+                }).join('')}
+            </ul>
+            <p>ยอดรวม: <strong>${receipt.totalAmount.toFixed(2)} บาท</strong></p>
+            <p>เวลาชำระเงิน: <strong>${paidAt}</strong></p>
+            <p class="muted">บันทึกการชำระเงินเรียบร้อย</p>
+            <button class="primary" onclick="printCustomerReceipt(${tableId})">🖨️ พิมพ์ใบเสร็จลูกค้า</button>
+        </div>
+    `;
+
+    const receiptContainer = document.getElementById('receiptContainer');
+    receiptContainer.innerHTML = staffViewHtml;
+    receiptContainer.style.display = 'block'; // ✅ แสดง
+}
+
+function hideReceipt() {
+    const receiptContainer = document.getElementById('receiptContainer');
+    receiptContainer.style.display = 'none'; // ✅ ซ่อน
+}
+
+
+
+function mergeOrdersByTable(orders, tableId) {
+    const merged = {
+        tableId: tableId,
+        items: [],
+        totalAmount: 0,
+        orders: [],
+        paidAt: new Date().toISOString(),
+    };
+
+    orders.forEach(order => {
+        if (order.tableId === tableId) {
+            merged.orders.push(order.id);
+            (order.items || []).forEach(item => {
+                // ถ้าเมนูซ้ำให้รวมจำนวน
+                const existing = merged.items.find(i => i.menuItemDetails?.name === item.menuItemDetails?.name);
+                if (existing) {
+                    existing.quantity += item.quantity;
+                } else {
+                    merged.items.push({...item});
+                }
+            });
+            merged.totalAmount += calculateOrderTotal(order);
+        }
+    });
+
+    return merged;
+}
+
+async function collectPayment(orderId, tableId) {
+    if (!confirm(`ยืนยันการชำระเงินสำหรับโต๊ะ #${tableId}?`)) return;
+
+    try {
+        const resPending = await fetch(PENDING_ENDPOINT);
+        if (!resPending.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${resPending.status})`);
+        const pendingOrders = await resPending.json();
+
+        // รวมออเดอร์ของโต๊ะเดียวกัน
+        const mergedReceipt = mergeOrdersByTable(pendingOrders, tableId);
+
+        // ชำระเงินทุกออเดอร์ของโต๊ะ
+        for (const oid of mergedReceipt.orders) {
+            await fetch(`${API_BASE}/${oid}/payment`, { method: 'POST' });
+        }
+
+        // แสดงและปริ้นใบเสร็จ
+        showReceipt(tableId, mergedReceipt);
+
+        loadPendingOrders();
+        loadSales();
+    } catch (err) {
+        alert(`❌ ${err.message}`);
+    }
+}
+
+
+function printCustomerReceipt(tableId) {
+    const receiptCard = document.getElementById('receiptCard');
+    if (!receiptCard) return;
+
+    const storeName = "Rest terr น้อง";
+    const address = "123/45 ถนนสุขุมวิท เขตวัฒนา กรุงเทพฯ 10110";
+    const phone = "โทร: 02-123-4567";
+    const footerNote = "ขอบคุณที่ใช้บริการ 🙏";
+
+    const now = new Date().toLocaleString('th-TH');
+    const totalText = receiptCard.querySelector('strong')?.innerText ?? '0.00 บาท';
+    const listItems = Array.from(receiptCard.querySelectorAll('ul li')).map(li => li.innerText);
+
+    const customerHtml = `
+        <div class="receipt-wrapper">
+            <div class="header">
+                <h1>${storeName}</h1>
+                <p>${address}</p>
+                <p>${phone}</p>
+                <hr>
+                <h2>ใบเสร็จรับเงิน (Tax Invoice)</h2>
+                <p>โต๊ะ: ${tableId} | วันที่: ${now}</p>
+                <hr>
+            </div>
+
+            <table class="items">
+                <thead>
+                    <tr>
+                        <th style="width:60%">รายการ</th>
+                        <th style="width:20%; text-align:center;">จำนวน</th>
+                        <th style="width:20%; text-align:right;">ราคา (บาท)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${listItems.map(item => {
+                        const [menu, priceText] = item.split('=');
+                        const matchQty = menu.match(/×\s*(\d+)/);
+                        const qty = matchQty ? matchQty[1] : '1';
+                        const name = menu.replace(/×\s*\d+/, '').trim();
+                        const price = priceText ? priceText.replace('บาท', '').trim() : '';
+                        return `<tr>
+                            <td>${name}</td>
+                            <td style="text-align:center;">${qty}</td>
+                            <td style="text-align:right;">${price}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+
+            <hr>
+            <p class="total">รวมทั้งหมด: ${totalText}</p>
+            <hr>
+            <div class="footer">
+                <p>${footerNote}</p>
+                <p class="small">พิมพ์เมื่อ: ${now}</p>       
+            </div>
+        </div>
+    `;
+
+    const printWindow = window.open('', '', 'width=800,height=1100');
+    printWindow.document.write(`
+        <html>
+        <head>
+            <title>ใบเสร็จโต๊ะ ${tableId}</title>
+            <style>
+                /* ✅ ตั้งค่าขนาดกระดาษ A4 เต็มหน้า */
+                @page {
+                    size: A4 portrait;
+                    margin: 25mm;
+                }
+
+                body {
+                    font-family: 'TH Sarabun New', sans-serif;
+                    font-size: 16px;
+                    color: #333;
+                    background: #fff;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                .receipt-wrapper {
+                    width: 100%;
+                    max-width: 700px;
+                    margin: 0 auto;
+                }
+
+                .header {
+                    text-align: center;
+                    margin-bottom: 20px;
+                }
+
+                h1 {
+                    font-size: 28px;
+                    margin: 0;
+                }
+
+                h2 {
+                    font-size: 20px;
+                    margin: 10px 0;
+                    text-decoration: underline;
+                }
+
+                p {
+                    margin: 4px 0;
+                    line-height: 1.3;
+                }
+
+                hr {
+                    border: none;
+                    border-top: 1px solid #999;
+                    margin: 10px 0;
+                }
+
+                table.items {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 10px;
+                }
+
+                table.items th, table.items td {
+                    padding: 8px 6px;
+                    border-bottom: 1px solid #ddd;
+                }
+
+                table.items th {
+                    background: #f4f4f4;
+                }
+
+                .total {
+                    text-align: right;
+                    font-weight: bold;
+                    font-size: 18px;
+                    margin-top: 20px;
+                }
+
+                .footer {
+                    text-align: center;
+                    margin-top: 40px;
+                    font-size: 15px;
+                }
+
+                .small {
+                    font-size: 13px;
+                    color: #666;
+                }
+
+                @media print {
+                    html, body {
+                        background: #fff;
+                    }
+                }
+            </style>
+        </head>
+        <body>${customerHtml}</body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+    printWindow.close();
+}
+// -------------------- ยอดขายล่าสุด --------------------
+let salesChart = null, menuPieChart = null;
+//แก้ไขโค้ด
+async function loadSales() {
+    salesError.style.display='none';
+    salesBody.innerHTML='<tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>';
+    try {
+        const res = await fetch(SALES_ENDPOINT);
+        if(!res.ok) throw new Error(`โหลดยอดขายไม่สำเร็จ (${res.status})`);
+        let data = await res.json();
+
+        // 🔹 กรองตามวันที่ที่เลือก
+        const selectedDate = document.getElementById('salesDateFilter').value;
+        if (selectedDate) {
+            data = data.filter(order => {
+                if (!order.createdAt) return false;
+                const orderDate = new Date(order.createdAt).toLocaleDateString('sv-SE'); 
+             // จะได้รูปแบบ YYYY-MM-DD ตรงกับ <input type="date">
+                return orderDate === selectedDate;
+            });
+        }
+
+        renderSales(data);
+        renderSalesChart(data);
+        renderMenuPieChart(data);
+    } catch(err) {
+        salesError.innerText=`❌ ${err.message}`;
+        salesError.style.display='block';
+        salesBody.innerHTML='<tr><td colspan="5">ไม่สามารถโหลดยอดขายได้</td></tr>';
+        document.getElementById('salesTotal').innerText='0.00';
+    }
+}
+
+
+function renderSales(orders) {
+    if(!orders||orders.length===0){
+        salesBody.innerHTML='<tr><td colspan="5" class="muted">ยังไม่มีออเดอร์ที่ชำระเงิน</td></tr>';
+        document.getElementById('salesTotal').innerText='0.00';
+        return;
+    }
+    let totalSales=0;
+    salesBody.innerHTML = orders.map(order=>{
+        const total=calculateOrderTotal(order);
+        totalSales+=total;
+        const itemCount=(order.items||[]).reduce((s,i)=>s+i.quantity,0);
+        const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH'):'-';
+        return `<tr>
+            <td>#${order.id}</td>
+            <td>${order.tableId??'-'}</td>
+            <td>${itemCount}</td>
+            <td>${total.toFixed(2)}</td>
+            <td>${createdAt}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('salesTotal').innerText=totalSales.toFixed(2);
+}
+
+function calculateOrderTotal(order){
+    return (order.items||[]).reduce((sum,item)=>sum + resolveItemPrice(item)*item.quantity,0);
+}
+function resolveItemPrice(item){
+    if(item.menuItemDetails && typeof item.menuItemDetails.price==='number') return item.menuItemDetails.price;
+    if(typeof item.price==='number') return item.price;
+    return 0;
+}
+
+// -------------------- กราฟ --------------------
+function renderSalesChart(orders){
+    if(!orders||orders.length===0) return;
+    const salesByDate = {};
+    orders.forEach(order=>{
+        const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('th-TH'):'ไม่ทราบ';
+        salesByDate[date] = (salesByDate[date]||0)+calculateOrderTotal(order);
+    });
+    const labels=Object.keys(salesByDate);
+    const data=Object.values(salesByDate);
+    const ctx=document.getElementById('salesChart').getContext('2d');
+    if(salesChart) salesChart.destroy();
+    salesChart = new Chart(ctx,{
+        type:'bar',
+        data:{ labels, datasets:[{ label:'ยอดขายต่อวัน (บาท)', data, backgroundColor:'rgba(255,193,7,0.7)', borderColor:'#f1c40f', borderWidth:1, borderRadius:6 }]},
+        options:{ responsive:true, plugins:{ legend:{display:false}, title:{display:true,text:'ยอดขายรายวัน', font:{size:16}}}, scales:{ x:{title:{display:true,text:'วันที่'}}, y:{beginAtZero:true,title:{display:true,text:'ยอดขาย (บาท)'}}} }
+    });
+}
+
+function renderMenuPieChart(orders){
+    if(!orders || orders.length===0) return;
+
+    const menuSales = {};
+    orders.forEach(order=>{
+        (order.items||[]).forEach(item=>{
+            const name = item.menuItemDetails?.name || item.name || 'ไม่ทราบชื่อเมนู';
+            const total = resolveItemPrice(item) * item.quantity;
+            menuSales[name] = (menuSales[name]||0) + total;
+        });
+    });
+
+    const labels = Object.keys(menuSales);
+    const data = Object.values(menuSales);
+    const ctx = document.getElementById('menuPieChart').getContext('2d');
+    if(menuPieChart) menuPieChart.destroy();
+
+    const selectedDate = document.getElementById('salesDateFilter').value || 'ทั้งหมด';
+    menuPieChart = new Chart(ctx,{
+        type:'pie',
+        data:{
+            labels,
+            datasets:[{
+                data,
+                backgroundColor:[
+                    'rgba(255,99,132,0.7)','rgba(54,162,235,0.7)',
+                    'rgba(255,206,86,0.7)','rgba(75,192,192,0.7)',
+                    'rgba(153,102,255,0.7)','rgba(255,159,64,0.7)'
+                ],
+                borderColor:'#fff',
+                borderWidth:1
+            }]
+        },
+        options:{
+            plugins:{
+                title:{
+                    display:true,
+                    text:`สัดส่วนยอดขายแต่ละเมนู (${selectedDate})`,
+                    font:{size:16}
+                },
+                legend:{position:'bottom'}
+            }
+        }
+    });
+}
+
+
+//รี่
+
+
+
+function initStaffInfo() {
+    const staffInfoEl = document.getElementById('staffInfo');
+    const name = localStorage.getItem('staffDisplayName') || 'พนักงาน';
+    const role = localStorage.getItem('staffRole') || 'EMPLOYEE';
+    staffInfoEl.textContent = `${name} (${role})`;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (localStorage.getItem('isLoggedIn') !== 'true') {
+        window.location.href = 'staff_login.html';
+    }
+    initStaffInfo();  // ✅ เพิ่มบรรทัดนี้
+    fetchKitchenOrders();
+    setInterval(fetchKitchenOrders, 5000);
+});
+
+
+
+//🔹 ฟังก์ชันออกจากระบบ
+function logout() {
+    if (confirm("คุณต้องการออกจากระบบหรือไม่?")) {
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('staffDisplayName');
+        localStorage.removeItem('staffRole');
+        window.location.href = 'staff_login.html';
+    }
+}
+
+// 🔹 ผูก event ปุ่ม logout
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+
+
+document.addEventListener('DOMContentLoaded',()=>{
+    initStaffInfo();
+    loadPendingOrders();
+    loadSales();
+});
+</script>
+</body>
+</html>

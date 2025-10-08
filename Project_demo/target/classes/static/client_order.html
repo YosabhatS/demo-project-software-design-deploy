@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>สั่งอาหารออนไลน์</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 15px 15px 80px 15px; background: #f8f8f8; }
+        .header { background-color: #007bff; color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        .menu-item, .order-item { background: white; padding: 15px; margin-bottom: 10px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; }
+        .item-details h3 { margin: 0 0 5px 0; color: #333; }
+        .item-details p { margin: 0; color: #555; font-size: 0.9em; }
+        .controls { display: flex; align-items: center; }
+        .controls button { background: #dc3545; color: white; border: none; padding: 5px 10px; cursor: pointer; border-radius: 4px; font-weight: bold; margin: 0 5px; }
+        .controls input { width: 40px; text-align: center; border: 1px solid #ccc; border-radius: 4px; padding: 5px; }
+        .controls button.add { background: #28a745; }
+        #order-summary { position: fixed; bottom: 0; left: 0; right: 0; background-color: #343a40; color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -2px 10px rgba(0,0,0,0.2); flex-wrap: wrap; gap: 10px; }
+        #order-summary button { background: #ffc107; color: #333; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .log-message { margin-top: 15px; padding: 10px; border-radius: 5px; }
+        .log-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .log-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🍽 ร้านอาหาร - สั่งออนไลน์</h1>
+        <p>โต๊ะหมายเลข: <strong id="tableIdDisplay">--</strong></p>
+    </div>
+
+    <div id="menuList">
+        <h2>เมนูอาหาร</h2>
+        <p>กำลังโหลดเมนู...</p>
+    </div>
+
+    <div id="existingOrders">
+        <h2>📝 รายการที่สั่งแล้ว</h2>
+        <p>กำลังโหลด...</p>
+    </div>
+
+    <div id="order-summary">
+        <div>
+            <span>จำนวนรายการใหม่: <strong id="totalItemsDisplay">0</strong></span>
+        </div>
+        <div>
+            <button onclick="submitOrder()">ส่งคำสั่งซื้อ</button>
+            <span style="margin-left: 12px; font-size: 0.9em; color: #ffc107;">
+                💡 แจ้งพนักงานเพื่อชำระเงินที่เคาน์เตอร์
+            </span>
+        </div>
+    </div>
+
+    <div class="log-message" id="log"></div>
+
+    <script>
+        const ORDER_API_URL = 'http://localhost:8082/api/orders';   // Service สำหรับ client
+        const DATA_API_URL = 'http://localhost:8085/api/data';      // Service สำหรับข้อมูล order/menu
+        const TABLE_ID = new URLSearchParams(window.location.search).get('tableId');
+
+        let menuItems = [];
+        let orderItems = {};
+        let activeOrders = [];
+
+        document.getElementById('tableIdDisplay').innerText = TABLE_ID || 'ไม่พบ';
+
+        // โหลดชื่อโต๊ะ
+        async function fetchTableName() {
+            if (!TABLE_ID) return;
+            try {
+                const response = await fetch(`${ORDER_API_URL}/tables/${TABLE_ID}`);
+                if (response.ok) {
+                    const table = await response.json();
+                    document.getElementById('tableIdDisplay').innerText = table.tableNumber;
+                }
+            } catch (_) {}
+        }
+
+        // โหลดเมนู
+        async function fetchMenuItems() {
+            try {
+                const response = await fetch(`${ORDER_API_URL}/menu`);
+                if (response.ok) {
+                    menuItems = await response.json();
+                    renderMenu();
+                }
+            } catch (error) {
+                logMessage(`❌ Network Error: ${error.message}`, true);
+            }
+        }
+
+        function renderMenu() {
+            const listElement = document.getElementById('menuList');
+            let html = '<h2>เมนูอาหาร</h2>';
+            if (menuItems.length === 0) {
+                listElement.innerHTML = '<p>ไม่พบเมนู</p>';
+                return;
+            }
+            menuItems.forEach(item => {
+                const qty = orderItems[item.id] || 0;
+                const imageSrc = `http://localhost:8085${item.imageUrl || '/images/default.jpg'}`;
+                html += `
+                    <div class="menu-item">
+                	<img src="${imageSrc}" alt="${item.name}" 
+                    style="width:80px; height:80px; object-fit:cover; border-radius:8px; margin-right:10px;">
+               <div class="item-details" style="flex:1;">
+                   <h3>${item.name}</h3>
+                   <p>ราคา: ${item.price.toFixed(2)} บาท</p>
+               </div>
+               <div class="controls">
+                   <button onclick="updateQuantity(${item.id}, -1)">-</button>
+                   <input type="number" id="qty-${item.id}" value="${qty}" readonly>
+                   <button class="add" onclick="updateQuantity(${item.id}, 1)">+</button>
+               </div>
+           </div>
+                `;
+            });
+            listElement.innerHTML = html;
+            updateSummary();
+        }
+
+        function updateQuantity(menuId, change) {
+            const input = document.getElementById(`qty-${menuId}`);
+            let newQty = (orderItems[menuId] || 0) + change;
+            if (newQty < 0) newQty = 0;
+            orderItems[menuId] = newQty;
+            input.value = newQty;
+            if (newQty === 0) delete orderItems[menuId];
+            updateSummary();
+        }
+
+        function updateSummary() {
+            const total = Object.values(orderItems).reduce((sum, qty) => sum + qty, 0);
+            document.getElementById('totalItemsDisplay').innerText = total;
+        }
+
+        // ส่งคำสั่งซื้อใหม่
+        async function submitOrder() {
+            const items = Object.entries(orderItems).map(([menuId, quantity]) => ({ menuId: parseInt(menuId), quantity }));
+            if (items.length === 0) {
+                logMessage('⚠️ กรุณาเลือกรายการอาหารก่อน', true);
+                return;
+            }
+            const body = { tableId: parseInt(TABLE_ID), items };
+            try {
+                const response = await fetch(ORDER_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                if (response.status === 201) {
+                    logMessage(`✅ สั่งอาหารเรียบร้อย`);
+                    orderItems = {};
+                    renderMenu();
+                    fetchActiveOrders(); // โหลดรายการที่สั่งแล้วใหม่
+                }
+            } catch (error) {
+                logMessage(`❌ Network Error: ${error.message}`, true);
+            }
+        }
+
+        // โหลดรายการที่สั่งแล้ว
+        async function fetchActiveOrders() {
+            try {
+                const response = await fetch(`${DATA_API_URL}/orders/table/${TABLE_ID}/current`);
+                if (response.ok) {
+                    const orderInfo = await response.json();
+                    activeOrders = orderInfo && orderInfo.items ? orderInfo.items : [];
+                    renderActiveOrders();
+                } else {
+                    document.getElementById('existingOrders').innerHTML = '<h2>📝 รายการที่สั่งแล้ว</h2><p>ไม่มีรายการ</p>';
+                }
+            } catch (error) {
+                logMessage(`❌ โหลดรายการเก่าไม่สำเร็จ`, true);
+            }
+        }
+
+        function renderActiveOrders() {
+            const container = document.getElementById('existingOrders');
+            if (activeOrders.length === 0) {
+                container.innerHTML = '<h2>📝 รายการที่สั่งแล้ว</h2><p>ไม่มีรายการ</p>';
+                return;
+            }
+            let html = '<h2>📝 รายการที่สั่งแล้ว</h2>';
+            activeOrders.forEach(item => {
+                const menuName = item.menuItemDetails?.name || 'เมนูไม่ทราบชื่อ';
+                const price = item.menuItemDetails?.price || 0;
+                html += `
+                    <div class="order-item">
+                        <div class="item-details">
+                            <h3>${menuName}</h3>
+                            <p>จำนวน: ${item.quantity} | ราคา: ${price.toFixed(2) * item.quantity} บาท</p>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+
+        function logMessage(message, isError = false) {
+            const log = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('th-TH');
+            log.className = isError ? 'log-message log-error' : 'log-message log-success';
+            log.innerText = `[${timestamp}] ${message}`;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchTableName();
+            fetchMenuItems();
+            fetchActiveOrders();
+        });
+    </script>
+</body>
+</html>

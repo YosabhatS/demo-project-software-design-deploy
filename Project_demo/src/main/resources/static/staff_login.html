@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8" />
+    <title>เข้าสู่ระบบพนักงาน</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+  /* ==========================
+   BODY & LAYOUT
+   ========================== */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* ฟอนต์หลัก */
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image: url('images/bg-client.png');
+    background-size: cover;
+    color: #fff;
+}
+
+/* ==========================
+   LOGIN CARD
+   ========================== */
+.login-card {
+    background: white; 
+    backdrop-filter: blur(12px);
+    padding: 30px;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.2);
+}
+
+/* ==========================
+   HEADING
+   ========================== */
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 2rem;
+    line-height: 1.2;
+    color: black;
+}
+
+/* ==========================
+   FORM ELEMENTS
+   ========================== */
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    
+}
+
+input {
+    width: 100%; /* ปรับเป็นเต็ม card */
+    padding: 12px;
+    border-radius: 8px;
+    border: bold;
+    margin-bottom: 16px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
+button {
+    width: 100%; /* ปุ่มเต็มความกว้าง */
+    padding: 12px;
+    border: none;
+    border-radius: 8px;
+    font-weight: bold;
+    cursor: pointer;
+    background: #2254c5;
+    color: white;
+    font-size: 1.05rem;
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    background: #ffd966;
+}
+
+/* ==========================
+   ERROR MESSAGES
+   ========================== */
+.error {
+    display: none; /* ซ่อนเริ่มต้น */
+    background: rgba(255, 0, 0, 0.2);
+    color: #ffdddd;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+}
+
+/* ==========================
+   SAMPLE USERS SECTION
+   ========================== */
+.sample-users {
+    margin-top: 24px;
+    font-size: 0.9rem;
+    background: rgba(0, 0, 0, 0.25);
+    padding: 16px;
+    border-radius: 10px;
+}
+
+.sample-users h2 {
+    margin-top: 0;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+th, td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    padding: 6px 4px;
+    text-align: left;
+}
+
+th {
+    color: #f1c40f;
+}
+
+.logo-container {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.logo {
+    width: 300px;   /* ปรับขนาดตามต้องการ */
+    height: auto;
+    border-radius: 50%; /* ทำเป็นวงกลม ถ้าอยากได้ */
+}
+
+    </style>
+</head>
+<body>
+    <div class="login-card">
+    
+    	<!-- รูปข้างบน -->
+    		<div class="logo-container">
+       			 <img src="images/logo.png" alt="Logo ร้านอาหาร" class="logo">
+   		 </div>
+    
+    
+        <h1>เข้าสู่ระบบพนักงาน</h1>
+        <div id="errorBox" class="error"></div>
+        <label for="username">ชื่อผู้ใช้</label>
+        <input type="text" id="username" placeholder="เช่น chef.master" autocomplete="username" />
+        <label for="password">รหัสผ่าน</label>
+        <input type="password" id="password" placeholder="••••••" autocomplete="current-password" />
+        <button id="loginBtn">เข้าสู่ระบบ</button>
+
+        
+    </div>
+
+    <script>
+        const LOGIN_API = '/api/auth/login';
+        const ROLE_PAGE_MAP = {
+            'CHEF': 'kitchen_display.html',
+            'EMPLOYEE': 'employee_portal.html'
+        };
+
+        document.getElementById('loginBtn').addEventListener('click', login);
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                login();
+            }
+        });
+
+        async function login() {
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const errorBox = document.getElementById('errorBox');
+
+            errorBox.style.display = 'none';
+
+            if (!username || !password) {
+                showError('กรุณากรอกชื่อผู้ใช้และรหัสผ่านให้ครบถ้วน');
+                return;
+            }
+
+            try {
+                const response = await fetch(LOGIN_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'ไม่สามารถเข้าสู่ระบบได้');
+                }
+
+                const targetPage = ROLE_PAGE_MAP[result.role];
+                if (!targetPage) {
+                    showError(`ไม่ทราบหน้าปลายทางของบทบาท ${result.role}`);
+                    return;
+                }
+                
+                
+             // ✅ เพิ่มสถานะล็อกอินไว้ใน localStorage
+                localStorage.setItem('isLoggedIn', 'true');
+
+                localStorage.setItem('staffDisplayName', result.displayName || username);
+                localStorage.setItem('staffRole', result.role);
+                window.location.href = targetPage;
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function showError(message) {
+            const errorBox = document.getElementById('errorBox');
+            errorBox.innerText = `❌ ${message}`;
+            errorBox.style.display = 'block';
+        }
+    </script>
+</body>
+</html>

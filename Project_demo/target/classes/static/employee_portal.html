@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>พนักงาน - คิดเงินและยอดขาย</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root { color-scheme: light dark; }
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    background: #f4f6f8;
+    color: #2c3e50;
+}
+header {
+    background: #1f3a93;
+    color: #fff;
+    padding: 18px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+header h1 { margin:0; font-size:1.6rem; }
+.staff-info { font-size:0.95rem; }
+
+main {
+    display: grid;
+    gap: 20px;
+    padding: 24px;
+}
+@media (min-width: 960px) {
+    main { grid-template-columns: 1.2fr 1fr; }
+}
+section {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(31,58,147,0.08);
+}
+h2 {
+    margin-top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 1.2rem;
+}
+button.primary {
+    background: #f1c40f;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #2c3e50;
+}
+button.secondary {
+    background: transparent;
+    border: 1px solid rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+    color: inherit;
+}
+button:disabled { opacity:0.5; cursor:not-allowed; }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+}
+th, td { text-align:left; padding:10px 8px; border-bottom:1px solid #ecf0f1; vertical-align: top; }
+th { background: #f8f9fb; color:#2c3e50; }
+.order-items { font-size:0.9rem; }
+.order-items li { list-style:none; }
+.status-pill {
+    display:inline-block;
+    padding:4px 10px;
+    border-radius:999px;
+    font-size:0.8rem;
+    background:#ffeaa7;
+    color:#8e44ad;
+}
+.error-box {
+    background:#f8d7da;
+    color:#721c24;
+    padding:12px;
+    border-radius:8px;
+    margin-top:12px;
+    display:none;
+}
+.receipt-card {
+    margin-top:16px;
+    border:1px dashed #95a5a6;
+    padding:16px;
+    border-radius:10px;
+    background:#fafafa;
+}
+.totals { text-align:right; margin-top:18px; font-size:1.1rem; font-weight:bold; }
+.table-search { display:flex; gap:10px; margin-top:12px; }
+.table-search input {
+    flex:1;
+    padding:10px;
+    border-radius:8px;
+    border:1px solid rgba(0,0,0,0.2);
+}
+.muted { color:#7f8c8d; }
+
+/* Chart Layout */
+.chart-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: 20px;
+}
+.chart-box {
+    flex: 1 1 45%; 
+    min-width: 350px;
+    max-width: 400px; /* ลดขนาด Pie Chart */
+    background: #fff;
+    padding: 20px;
+    border-radius: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+</style>
+</head>
+
+<body>
+<header>
+    <h1>ศูนย์ควบคุมพนักงาน</h1>
+    <div class="staff-info" id="staffInfo">กำลังตรวจสอบบัญชี...</div>
+</header>
+
+<main>
+    <!-- หน้าคิดเงิน -->
+    <section id="checkoutSection">
+        <h2>💳 หน้าคิดเงิน <button class="secondary" id="refreshPending">รีเฟรช</button></h2>
+        <p class="muted">ดูออเดอร์ที่ทำอาหารเสร็จและรอการคิดเงิน</p>
+        <div class="table-search">
+            <input type="number" id="tableSearch" placeholder="ค้นหาด้วยหมายเลขโต๊ะ" min="1" />
+            <button class="secondary" id="filterBtn">ค้นหา</button>
+            <button class="secondary" id="clearFilterBtn">ล้าง</button>
+        </div>
+        <div id="pendingError" class="error-box"></div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>โต๊ะ</th>
+                    <th>รายการอาหาร</th>
+                    <th>ยอดรวม (บาท)</th>
+                    <th>จัดการ</th>
+                </tr>
+            </thead>
+            <tbody id="pendingOrdersBody">
+                <tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+        </table>
+        <div id="receiptContainer"></div>
+    </section>
+
+    <!-- ยอดขายล่าสุด + กราฟ -->
+    <section>
+        <h2>📊 ยอดขายล่าสุด <button class="secondary" id="refreshSales">รีเฟรช</button></h2>
+        <p class="muted">สรุปยอดขายจากออเดอร์ที่ชำระเงินแล้ว</p>
+        <div id="salesError" class="error-box"></div>
+
+        <div class="chart-container">
+            <div class="chart-box">
+                <canvas id="salesChart"></canvas>
+            </div>
+            <div class="chart-box">
+                <canvas id="menuPieChart"></canvas>
+            </div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Order</th>
+                    <th>โต๊ะ</th>
+                    <th>จำนวนรายการ</th>
+                    <th>ยอดรวม (บาท)</th>
+                    <th>เวลาสั่ง</th>
+                </tr>
+            </thead>
+            <tbody id="salesBody">
+                <tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>
+            </tbody>
+        </table>
+        <div class="totals">ยอดขายรวม: <span id="salesTotal">0.00</span> บาท</div>
+    </section>
+</main>
+
+<script>
+const API_BASE = '/api/orders';
+const PENDING_ENDPOINT = `${API_BASE}/status/COMPLETED`;
+const SALES_ENDPOINT = `${API_BASE}/status/PAID`;
+
+const staffInfo = document.getElementById('staffInfo');
+const pendingBody = document.getElementById('pendingOrdersBody');
+const salesBody = document.getElementById('salesBody');
+const pendingError = document.getElementById('pendingError');
+const salesError = document.getElementById('salesError');
+const receiptContainer = document.getElementById('receiptContainer');
+
+document.getElementById('refreshPending').addEventListener('click', loadPendingOrders);
+document.getElementById('refreshSales').addEventListener('click', loadSales);
+document.getElementById('filterBtn').addEventListener('click', loadPendingOrders);
+document.getElementById('clearFilterBtn').addEventListener('click', () => {
+    document.getElementById('tableSearch').value = '';
+    loadPendingOrders();
+});
+
+function initStaffInfo() {
+    const name = localStorage.getItem('staffDisplayName') || 'พนักงาน';
+    const role = localStorage.getItem('staffRole') || 'EMPLOYEE';
+    staffInfo.innerText = `${name} (${role})`;
+}
+
+// -------------------- หน้าคิดเงิน --------------------
+async function loadPendingOrders() {
+    pendingError.style.display = 'none';
+    const tableFilter = document.getElementById('tableSearch').value.trim();
+    pendingBody.innerHTML = '<tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>';
+    try {
+        const res = await fetch(PENDING_ENDPOINT);
+        if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
+        const data = await res.json();
+        const filtered = tableFilter ? data.filter(order => `${order.tableId}` === tableFilter) : data;
+        renderPendingOrders(filtered);
+    } catch (err) {
+        pendingError.innerText = `❌ ${err.message}`;
+        pendingError.style.display = 'block';
+        pendingBody.innerHTML = '<tr><td colspan="5">ไม่สามารถโหลดรายการรอคิดเงินได้</td></tr>';
+    }
+}
+
+function renderPendingOrders(orders) {
+    if (!orders || orders.length===0) {
+        pendingBody.innerHTML = '<tr><td colspan="5" class="muted">ไม่มีออเดอร์ที่รอคิดเงิน</td></tr>';
+        return;
+    }
+    pendingBody.innerHTML = orders.map(order => {
+        const total = calculateOrderTotal(order);
+        const itemsHtml = (order.items||[]).map(item => {
+            const name = item.menuItemDetails?.name || item.name || 'เมนูไม่ทราบชื่อ';
+            const price = resolveItemPrice(item);
+            return `<li>${name} × ${item.quantity} = ${(price*item.quantity).toFixed(2)} บาท</li>`;
+        }).join('');
+        return `<tr>
+            <td>#${order.id} <span class="status-pill">${order.status||'COMPLETED'}</span></td>
+            <td>${order.tableId ?? '-'}</td>
+            <td><ul class="order-items">${itemsHtml}</ul></td>
+            <td>${total.toFixed(2)}</td>
+            <td><button class="primary" onclick="collectPayment(${order.id}, ${order.tableId ?? 'null'})">รับชำระเงิน</button></td>
+        </tr>`;
+    }).join('');
+}
+
+async function collectPayment(orderId, tableId) {
+    if(!confirm(`ยืนยันการชำระเงินสำหรับออเดอร์ #${orderId}?`)) return;
+    try {
+        const endpoint = `${API_BASE}/${orderId}/payment`;
+        const res = await fetch(endpoint, {method:'POST'});
+        if(!res.ok) throw new Error(`ไม่สามารถชำระเงินได้ (status ${res.status})`);
+        const receipt = await res.json();
+        showReceipt(orderId, tableId, receipt);
+        loadPendingOrders();
+        loadSales();
+    } catch(err) { alert(`❌ ${err.message}`); }
+}
+
+function showReceipt(orderId, tableId, receipt) {
+    const paidAt = receipt.paidAt ? new Date(receipt.paidAt).toLocaleString('th-TH') : '-';
+    const amount = receipt.totalAmount ?? 0;
+    receiptContainer.innerHTML = `<div class="receipt-card">
+        <h3>🧾 ใบเสร็จรับเงิน</h3>
+        <p>Order #: <strong>${orderId}</strong></p>
+        <p>โต๊ะ: <strong>${tableId ?? receipt.tableId ?? '-'}</strong></p>
+        <p>ยอดรวม: <strong>${amount.toFixed(2)} บาท</strong></p>
+        <p>เวลาชำระเงิน: <strong>${paidAt}</strong></p>
+        <p class="muted">${receipt.message??'บันทึกการชำระเงินเรียบร้อย'}</p>
+    </div>`;
+}
+
+// -------------------- ยอดขายล่าสุด --------------------
+let salesChart = null, menuPieChart = null;
+
+async function loadSales() {
+    salesError.style.display='none';
+    salesBody.innerHTML='<tr><td colspan="5" class="muted">กำลังโหลดข้อมูล...</td></tr>';
+    try {
+        const res = await fetch(SALES_ENDPOINT);
+        if(!res.ok) throw new Error(`โหลดยอดขายไม่สำเร็จ (${res.status})`);
+        const data = await res.json();
+        renderSales(data);
+        renderSalesChart(data);
+        renderMenuPieChart(data);
+    } catch(err) {
+        salesError.innerText=`❌ ${err.message}`;
+        salesError.style.display='block';
+        salesBody.innerHTML='<tr><td colspan="5">ไม่สามารถโหลดยอดขายได้</td></tr>';
+        document.getElementById('salesTotal').innerText='0.00';
+    }
+}
+
+function renderSales(orders) {
+    if(!orders||orders.length===0){
+        salesBody.innerHTML='<tr><td colspan="5" class="muted">ยังไม่มีออเดอร์ที่ชำระเงิน</td></tr>';
+        document.getElementById('salesTotal').innerText='0.00';
+        return;
+    }
+    let totalSales=0;
+    salesBody.innerHTML = orders.map(order=>{
+        const total=calculateOrderTotal(order);
+        totalSales+=total;
+        const itemCount=(order.items||[]).reduce((s,i)=>s+i.quantity,0);
+        const createdAt = order.createdAt ? new Date(order.createdAt).toLocaleString('th-TH'):'-';
+        return `<tr>
+            <td>#${order.id}</td>
+            <td>${order.tableId??'-'}</td>
+            <td>${itemCount}</td>
+            <td>${total.toFixed(2)}</td>
+            <td>${createdAt}</td>
+        </tr>`;
+    }).join('');
+    document.getElementById('salesTotal').innerText=totalSales.toFixed(2);
+}
+
+function calculateOrderTotal(order){
+    return (order.items||[]).reduce((sum,item)=>sum + resolveItemPrice(item)*item.quantity,0);
+}
+function resolveItemPrice(item){
+    if(item.menuItemDetails && typeof item.menuItemDetails.price==='number') return item.menuItemDetails.price;
+    if(typeof item.price==='number') return item.price;
+    return 0;
+}
+
+// -------------------- กราฟ --------------------
+function renderSalesChart(orders){
+    if(!orders||orders.length===0) return;
+    const salesByDate = {};
+    orders.forEach(order=>{
+        const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('th-TH'):'ไม่ทราบ';
+        salesByDate[date] = (salesByDate[date]||0)+calculateOrderTotal(order);
+    });
+    const labels=Object.keys(salesByDate);
+    const data=Object.values(salesByDate);
+    const ctx=document.getElementById('salesChart').getContext('2d');
+    if(salesChart) salesChart.destroy();
+    salesChart = new Chart(ctx,{
+        type:'bar',
+        data:{ labels, datasets:[{ label:'ยอดขายต่อวัน (บาท)', data, backgroundColor:'rgba(255,193,7,0.7)', borderColor:'#f1c40f', borderWidth:1, borderRadius:6 }]},
+        options:{ responsive:true, plugins:{ legend:{display:false}, title:{display:true,text:'ยอดขายรายวัน', font:{size:16}}}, scales:{ x:{title:{display:true,text:'วันที่'}}, y:{beginAtZero:true,title:{display:true,text:'ยอดขาย (บาท)'}}} }
+    });
+}
+
+function renderMenuPieChart(orders){
+    if(!orders||orders.length===0) return;
+    const today=new Date().toLocaleDateString('th-TH');
+    const todayOrders = orders.filter(order=>{
+        if(!order.createdAt) return false;
+        return new Date(order.createdAt).toLocaleDateString('th-TH')===today;
+    });
+    if(todayOrders.length===0) return;
+    const menuSales={};
+    todayOrders.forEach(order=>{
+        (order.items||[]).forEach(item=>{
+            const name = item.menuItemDetails?.name || item.name || 'ไม่ทราบชื่อเมนู';
+            const total = resolveItemPrice(item)*item.quantity;
+            menuSales[name]=(menuSales[name]||0)+total;
+        });
+    });
+    const labels=Object.keys(menuSales);
+    const data=Object.values(menuSales);
+    const ctx=document.getElementById('menuPieChart').getContext('2d');
+    if(menuPieChart) menuPieChart.destroy();
+    menuPieChart = new Chart(ctx,{
+        type:'pie',
+        data:{ labels, datasets:[{data, backgroundColor:[
+            'rgba(255,99,132,0.7)','rgba(54,162,235,0.7)','rgba(255,206,86,0.7)',
+            'rgba(75,192,192,0.7)','rgba(153,102,255,0.7)','rgba(255,159,64,0.7)'
+        ], borderColor:'#fff', borderWidth:1 }]},
+        options:{ plugins:{ title:{display:true,text:`สัดส่วนยอดขายแต่ละเมนู (${today})`, font:{size:16}}, legend:{position:'bottom'} } }
+    });
+}
+
+document.addEventListener('DOMContentLoaded',()=>{
+    initStaffInfo();
+    loadPendingOrders();
+    loadSales();
+});
+</script>
+</body>
+</html>

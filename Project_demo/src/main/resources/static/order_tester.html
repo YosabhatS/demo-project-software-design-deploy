@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Restaurant Ordering Service Tester (Port 8082)</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .container { background: #f4f4f4; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+        h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; }
+        input[type="number"], input[type="text"], button { padding: 10px; margin: 5px 0; width: 90%; box-sizing: border-box; }
+        button { cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; width: auto; margin-right: 10px; }
+        button:hover { background: #0056b3; }
+        #log, #result { background: #fff; border: 1px solid #ddd; padding: 10px; margin-top: 10px; white-space: pre-wrap; word-wrap: break-word; }
+        .item-input { display: flex; gap: 10px; align-items: center; margin-bottom: 5px; }
+        .item-input input { width: 40%; }
+        .item-list { border: 1px dashed #aaa; padding: 10px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 Microservice Order Tester (Port 8082)</h1>
+    <p>โปรดตรวจสอบให้แน่ใจว่า **Data Service (8085)** และ **Ordering Service (8082)** กำลังรันอยู่</p>
+
+    <div class="container">
+        <h2>1. สร้างคำสั่งซื้อใหม่ (POST /api/orders)</h2>
+        <label for="tableId">หมายเลขโต๊ะ (Table ID):</label>
+        <input type="number" id="tableId" value="101"><br>
+
+        <h3>รายการที่สั่ง:</h3>
+        <div id="itemsContainer" class="item-list">
+            <div class="item-input">
+                <input type="number" class="menu-id" placeholder="Menu ID (เช่น 1)" value="1">
+                <input type="number" class="quantity" placeholder="จำนวน (Quantity)" value="2">
+                <button onclick="removeItem(this)">ลบ</button>
+            </div>
+            <div class="item-input">
+                <input type="number" class="menu-id" placeholder="Menu ID (เช่น 2)" value="2">
+                <input type="number" class="quantity" placeholder="จำนวน (Quantity)" value="1">
+                <button onclick="removeItem(this)">ลบ</button>
+            </div>
+        </div>
+        <button onclick="addItemInput()" style="background: #28a745;">+ เพิ่มรายการ</button>
+        <hr>
+        <button onclick="createOrder()">สร้าง Order</button>
+        <p>Order ID ที่สร้างได้: <strong id="createdOrderId">--</strong></p>
+    </div>
+
+    <div class="container">
+        <h2>2. ดึงรายละเอียดคำสั่งซื้อ (GET /api/orders/{id})</h2>
+        <label for="fetchOrderId">Order ID ที่ต้องการดึงข้อมูล:</label>
+        <input type="number" id="fetchOrderId" placeholder="ใส่ Order ID (เช่น 1)"><br>
+        <button onclick="fetchOrderDetails()">ดึงรายละเอียด Order</button>
+        
+        <h3>ผลลัพธ์:</h3>
+        <div id="result">--- แสดง JSON Response ที่นี่ ---</div>
+    </div>
+
+    <div class="container">
+        <h2>Log การดำเนินการ:</h2>
+        <div id="log"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8082/api/orders';
+
+        function logMessage(message, isError = false) {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('th-TH');
+            const color = isError ? 'red' : 'green';
+            logElement.innerHTML += `<span style="color:${color};">[${timestamp}] ${message}</span><br>`;
+        }
+        
+        // --- 1. POST (สร้าง Order) ---
+
+        function addItemInput() {
+            const container = document.getElementById('itemsContainer');
+            const newItem = document.createElement('div');
+            newItem.className = 'item-input';
+            newItem.innerHTML = `
+                <input type="number" class="menu-id" placeholder="Menu ID">
+                <input type="number" class="quantity" placeholder="จำนวน">
+                <button onclick="removeItem(this)">ลบ</button>
+            `;
+            container.appendChild(newItem);
+        }
+
+        function removeItem(button) {
+            button.parentElement.remove();
+        }
+
+        async function createOrder() {
+            const tableId = document.getElementById('tableId').value;
+            const itemInputs = document.querySelectorAll('#itemsContainer .item-input');
+            const items = [];
+
+            itemInputs.forEach(inputDiv => {
+                const menuId = parseInt(inputDiv.querySelector('.menu-id').value);
+                const quantity = parseInt(inputDiv.querySelector('.quantity').value);
+                if (menuId > 0 && quantity > 0) {
+                    items.push({ menuId, quantity });
+                }
+            });
+
+            if (!tableId || items.length === 0) {
+                logMessage('❌ กรุณาใส่หมายเลขโต๊ะและรายการเมนูอย่างน้อย 1 รายการ', true);
+                return;
+            }
+
+            const requestBody = { tableId: parseInt(tableId), items };
+            logMessage(`▶️ ส่ง POST Request: ${JSON.stringify(requestBody)}`);
+
+            try {
+                const response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                const responseJson = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('createdOrderId').innerText = responseJson.id;
+                    document.getElementById('fetchOrderId').value = responseJson.id;
+                    logMessage(`✅ สร้าง Order ID ${responseJson.id} สำเร็จ! Status: ${response.status}`);
+                } else {
+                    logMessage(`❌ เกิดข้อผิดพลาด! Status: ${response.status}. Response: ${JSON.stringify(responseJson)}`, true);
+                }
+            } catch (error) {
+                logMessage(`❌ Network Error: ${error.message}. ตรวจสอบว่า Service 8082 รันอยู่หรือไม่`, true);
+            }
+        }
+        
+        // --- 2. GET (ดึง Order) ---
+
+        async function fetchOrderDetails() {
+            const orderId = document.getElementById('fetchOrderId').value;
+            if (!orderId) {
+                logMessage('❌ กรุณาใส่ Order ID', true);
+                return;
+            }
+
+            const url = `${API_BASE_URL}/${orderId}`;
+            logMessage(`▶️ ส่ง GET Request ไปยัง: ${url}`);
+
+            try {
+                const response = await fetch(url, { method: 'GET' });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    document.getElementById('result').innerText = JSON.stringify(data, null, 4);
+                    logMessage(`✅ ดึงข้อมูล Order ID ${orderId} สำเร็จ! Status: ${response.status}`);
+                } else {
+                    const responseText = await response.text();
+                    document.getElementById('result').innerText = responseText;
+                    logMessage(`❌ เกิดข้อผิดพลาด! Status: ${response.status}. Response: ${responseText}`, true);
+                }
+            } catch (error) {
+                logMessage(`❌ Network Error: ${error.message}. ตรวจสอบว่า Service 8082 รันอยู่หรือไม่`, true);
+                document.getElementById('result').innerText = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

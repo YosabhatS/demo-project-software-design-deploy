@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>QR Code Scanner</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        .qr-placeholder { border: 2px solid #ccc; padding: 20px; margin-bottom: 20px; display: inline-block; }
+        .button { padding: 10px 20px; background-color: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+    </style>
+</head>
+<body>
+    <h1>สแกน QR Code เพื่อสั่งอาหาร</h1>
+    <div class="qr-placeholder">
+        <p>รูป QR Code โต๊ะ 1</p>
+    </div>
+    
+    <h2>ตัวอย่างลิงก์สำหรับโต๊ะ 1</h2>
+    <a href="client_order.html?tableId=1" class="button">คลิกเพื่อสั่งอาหาร (โต๊ะ 1)</a>
+    
+    <p style="margin-top: 20px;">**ในทางปฏิบัติ คุณต้องสร้าง QR Code สำหรับแต่ละโต๊ะ โดยแต่ละโค้ดจะชี้ไปที่ <code>http://localhost:8082/client_order.html?tableId=X</code>**</p>
+</body>
+</html>

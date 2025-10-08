@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ใบเสร็จรับเงิน</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'TH Sarabun New', sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; background: #fff; }
+        h1 { text-align: center; }
+        .receipt-box { border: 1px solid #ddd; padding: 20px; border-radius: 8px; background: white; }
+        .info { margin-bottom: 15px; }
+        .info p { margin: 5px 0; }
+        .total { text-align: right; font-size: 1.3em; font-weight: bold; }
+        .print-btn { display: block; width: 100%; margin-top: 20px; padding: 10px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 1.1em; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="receipt-box">
+        <h1>🧾 ใบเสร็จรับเงิน</h1>
+        <div class="info">
+            <p>หมายเลขคำสั่งซื้อ: <strong id="orderId"></strong></p>
+            <p>เวลาชำระเงิน: <strong id="paidAt"></strong></p>
+        </div>
+        <div class="total">
+            ยอดรวมทั้งหมด: <span id="totalAmount"></span> บาท
+        </div>
+        <button class="print-btn" onclick="window.print()">🖨️ พิมพ์ใบเสร็จ</button>
+    </div>
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        document.getElementById('orderId').innerText = params.get('orderId');
+        const paidAt = params.get('paidAt');
+        document.getElementById('paidAt').innerText = new Date(paidAt).toLocaleString('th-TH');
+        document.getElementById('totalAmount').innerText = params.get('amount');
+    </script>
+
+</body>
+</html>
