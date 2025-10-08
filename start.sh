@@ -1,5 +1,8 @@
 #!/bin/sh
-set -euo pipefail
+# BusyBox-based shells (like the ones Railway often uses) do not support
+# `set -o pipefail`. Restrict ourselves to POSIX sh flags so the script can run
+# anywhere.
+set -eu
 
 SERVICE_NAME="${RAILWAY_SERVICE_NAME:-${SERVICE_MODULE:-project_demo_web}}"
 PORT_VALUE="${PORT:-8080}"
